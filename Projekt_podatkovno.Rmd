@@ -1,0 +1,129 @@
+---
+title: "Cene stanovanj v Angliji med leti 1995 in 2020"
+author: "Chris Godnic"
+date: '2022-06-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=F, message=FALSE, warning = FALSE, error = TRUE)
+```
+
+<style>
+body {
+text-align: justify}
+</style>
+
+## Uvod
+
+Znano je, da je stanovanjska problematika že nekaj časa prisotna med nami. Ker nas je na svetu vedno več, število stanovanj pa se ne bistveno spreminja, je povpraševanje-ponudba vedno večja, kar pripelje do vedno večjega dviganja cen nepremičnin. Prav tako se za elitnejše lokacije največkrat potegujejo premožnejši ljudje, ki na koncu stanovanja ali hiše največkrat niti ne potrebujejo oziroma stanujejo v njem le nekaj dni na leto. Ker pa smo o Sloveniji in stanovanjskem problemu slišali že velikokrat sem se odločil raziskati trg v Združenem kraljestvu, s manjšim povdarkom na Londonu, ki je za Instanbulom in Moskvo tretje največje mesto v Evropi. 
+
+![London](C:/Users/giker/Documents/london.jpeg)
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(DataExplorer)
+library(esquisse)
+library(gt)
+```
+
+## Predstavitev problema
+
+Problem stanovanjske problematike in dviganja cen le teh v nebo sem si izbral, saj se je v preteklosti veliko govorilo o višanju cen stanovanj v Sloveniji ne pa tudi drugod po svetu. V projektu želel ugotoviti, kako izgleda višanje cen stanovanj skozi različna leta, saj nam dataset omogoča pregled kar skozi 25 let. 
+
+Ker so mestna središča navadno najbolj zaželjena je realno pričakovati, da bo imel center Londona tudi najvišjo povprečno ceno stanovanj. Prav tako je pričakovati razliko med ceno stanovanj v centru in na obrobju ter povprečno ceno po celotnem Združenem kraljestvu.
+
+
+## Osnovna predstavitev dataseta
+
+Dataset, ki sem ga našel na spletni strani [kaggle.com](https://www.kaggle.com), zavzema število prodanih stanovanj po dnevih  med leti 1995 in 2020. Polek dneva prodaje izvemo še v katerem delu Anglije se stanovanja prodajajo, povprečno ceno, kodo okraja, število prodanih hiš, število kriminalnih dejanj,ter številko okrožja. Dataset ima za obdobje petindvajsetih let vnešenih 13549 vrstic, vsaka vrstica pa pove število hiš prodanih na določen dan v določenem okrožju.
+```{r}
+df<-read.csv("C:/Users/giker/Desktop/Projekt podatkovno/housing_in_london_monthly_variables.csv")
+
+head(df)%>%gt
+```
+
+Pred začetkom analiziranja smo si ogledali še procent mankajočih podatkov, da nam kasneje ne bi ravno to povzročalo težav.
+
+```{r fig.align='center'}
+plot_missing(df)
+```
+
+
+## Analiziranje podatkov
+
+Najprej smo pogledali kako so cene stanovanj varirale skozi leta. Spodnji graf prikazuje povprečno dnevno ceno prodanega stanovanja po letih v Angliji.
+
+```{r fig.align='center'}
+ggplot()+
+  geom_line(df, mapping = aes(x=date, y=average_price), color="coral")+
+  labs(title = "Povprečna cena stanovanja v Angliji med leti 1995 in 2020", x = "Datum", y = "Povprečna cena v funtih")
+```
+
+Naredili smo tudi histogram, ki prikazuje število nepremčnin v različnih cenovnih rangih. Iz grafa lahko tudi razvidimo, da se večina hiš proda za nekaj manj kot 250000 funtov.
+
+```{r fig.align='center'}
+ggplot(df,aes(x=average_price))+ 
+  geom_histogram(colour = "darkgray", fill = "white", bins = 40)+
+  labs(x = "Povprečna cena", y = "Število hiš", title = "Histogram cen prodanih hiš")+
+  geom_vline(xintercept = mean(df$average_price, na.rm = TRUE), 
+             color = "red", show.legend = TRUE, size = 1.5)+
+  geom_vline(xintercept = median(df$average_price, na.rm = TRUE), 
+             color = "blue", show.legend = TRUE, size = 1.5)+
+  scale_color_manual(name = "statistics", values = c(mean = "red", median = "blue"))+
+  scale_x_continuous(labels = scales::comma)
+options(repr.plot.width = 14, repr.plot.height = 7)
+```
+Glede na to, da tako kot vsako večje mesto ima tudi London bolj drage nepremičnine blizu centra ter cenejše izven najbolj priljubljenega območja smo naredili graf, ki nam prikaže povprečne cene v centru Londona, cene na obrobju ter povprečne cene v Angliji na sploh. 
+
+
+```{r fig.align='center'}
+df <- df %>% 
+  mutate(date = ymd(date),
+         year=as.numeric(substr(date, 1, 4)))
+df %>% 
+  filter(str_detect(code, c("E13", "E92"))) %>% 
+  group_by(area, date) %>% 
+  summarise(mean_price = mean(average_price), .groups = "drop") %>% 
+  ggplot(aes(x=date, y=mean_price, group=area, colour=area)) +
+  geom_line(lwd=.8)+
+  theme_set(theme_minimal())+
+  labs(x= NULL, y="Average price (L)", title = "Povprečna cena hiš v primerjavi London-Anglija")+
+  scale_y_continuous(labels = scales::comma)+
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y")
+```
+
+Na koncu nas je še zanimalo, ali varira število prodanih hiš med različnimi meseci v letu.
+
+```{r fig.align='center'}
+hise_meseci<-df%>%select(date,houses_sold)%>%
+  separate(date,c("d","m","l"))%>%
+  group_by(m)%>%
+  na.omit()%>%
+  summarise(st_prodanih_his=mean(houses_sold))
+
+ggplot(hise_meseci) +
+  aes(x = m, y = st_prodanih_his) +
+  geom_col(fill = "#4682B4") +
+  labs(
+    x = "Meseci",
+    y = "Število prodanih hiš",
+    title = "Število prodanih hiš po mesecih"
+  ) +
+  theme_bw()
+```
+
+## Zaključek
+
+Iz podatkov smo razbrali, da ne le pri nas ampak, da so tudi drugod cene stanovanj poletele v nebo, to pa ni ustavilo ljudi od nakupa. V večini primerov opazimo, da se večina ljudi odloči za nakup stanovanja okoli 200000 funtov, ter le peščica za več kot 500000 funtov. 
+Iz grafov je moč razbrati, da je cena stanovanj v centru Londona drastično višja kot na obrobju, obe primerjavi povprečni ceni pa se v zadnjem času vedno bolj razlikujeta kot povprečna cena stanovanj po celotni Angliji.
+
+Ravno tako smo iz grafov ugotovili, da se najmanj stanovanj proda v začetku leta (januar, februar) ter največ v poletnih mesecih (julij, avgust).
+
+
+## Literatura
+
+JUSTINAS. 2020. Housing in London. Kaggle. https://www.kaggle.com/datasets/justinas/housing-in-london
